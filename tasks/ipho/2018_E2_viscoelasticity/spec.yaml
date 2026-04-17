@@ -1,0 +1,215 @@
+# IPhO 2018 Experimental Problem 2 — Viscoelasticity of a polymer thread
+# v0 prototype scope: Parts A + D only (7.6 / 10 points).
+# Tolerances with `source: derived` follow the broad-plan convention of ±10–30%
+# for fitting parameters where the official marking scheme omitted tolerances.
+
+meta:
+  year: 2018
+  host: Portugal
+  problem_id: E2
+  domain: [mechanics, viscoelasticity]
+  title: Viscoelasticity of a polymer thread
+  official_points: 10.0
+  simulated_points: 7.6           # Parts A + D
+  scope_notes: "Parts B (diameter via diffraction), C (thread swap), E (E under constant stress) deferred."
+  sources:
+    problem_pdf: "https://ipho.olimpicos.net/pdf/IPhO_2018_Q5.pdf"
+    solution_pdf: "https://ipho.olimpicos.net/pdf/IPhO_2018_S5.pdf"
+
+apparatus:
+  - id: scale
+    spec: "Digital scale, gram-force; displays 0.01 gf"
+    nominal_precision: {reading_gf: 0.01}
+    noise_sigma: {reading_gf: 0.01}
+  - id: ruler
+    spec: "Ruler / measuring tape, 0.5 mm smallest division"
+    nominal_precision: {length_m: 5.0e-4}
+    noise_model: "uniform_half_division"    # ±0.25 mm rectangular
+  - id: clock
+    spec: "Stopwatch; reading tagged automatically to each scale sample"
+    nominal_precision: {time_s: 0.01}
+    noise_sigma: {time_s: 0.1}             # human reaction-time dominated
+
+constants:
+  g: 9.80                      # m/s^2, Lisbon
+  thread_diameter_m: 4.80e-4   # given — Part B deferred
+  gf_to_N: 9.80e-3
+
+physics_model:
+  family: generalized_kelvin_constant_strain
+  governing_equation: "F(t) = F0 + sum_k F_k * exp(-t / tau_k),   F_k = E_k / beta"
+  relation_beta: "beta = g / (epsilon * S),  S = pi*(d/2)^2"
+  parameters:
+    - name: l0_m
+      description: "Unstretched thread length"
+      truth_value: 0.437
+      truth_sigma: 0.002
+      tolerance_full: 0.02     # ±2%
+      tolerance_half: 0.05
+      source: official
+    - name: P0_gf
+      description: "Mass-set weight"
+      truth_value: 81.11
+      truth_sigma: 0.03
+      tolerance_full: 0.01
+      tolerance_half: 0.02
+      source: official
+    - name: l_m
+      description: "Stretched thread length (held on support)"
+      truth_value: 0.510
+      truth_sigma: 0.002
+      tolerance_full: 0.02
+      tolerance_half: 0.05
+      source: official
+    - name: epsilon
+      description: "Strain under constant stretch"
+      truth_value: 0.167
+      truth_sigma: 0.007
+      tolerance_full: 0.10
+      tolerance_half: 0.20
+      source: derived
+    - name: F0_gf
+      description: "Long-time baseline of thread tension"
+      truth_value: 40.32
+      tolerance_full: 0.05
+      tolerance_half: 0.10
+      source: official
+    - name: F1_gf
+      description: "Amplitude of slowest decaying component"
+      truth_value: 2.28
+      tolerance_full: 0.30
+      tolerance_half: 0.50
+      source: official
+    - name: tau1_s
+      description: "Longest relaxation time"
+      truth_value: 1546
+      tolerance_full: 0.15
+      tolerance_half: 0.30
+      source: official
+    - name: F2_gf
+      description: "Amplitude of second component"
+      truth_value: 1.39
+      tolerance_full: 0.30
+      tolerance_half: 0.60
+      source: official
+    - name: tau2_s
+      description: "Second relaxation time"
+      truth_value: 177
+      tolerance_full: 0.25
+      tolerance_half: 0.50
+      source: official
+    - name: tau3_s
+      description: "Third (fastest) relaxation time; order-of-magnitude only"
+      truth_value: 50
+      tolerance_full: 0.60       # ~50% tolerance, the official sol labels this ≈
+      tolerance_half: 1.00
+      source: derived
+    - name: E0_SI
+      description: "Elastic Young modulus (long-time)"
+      truth_value: 1.31e7
+      tolerance_full: 0.20
+      tolerance_half: 0.40
+      source: official
+    - name: E1_SI
+      description: "Modulus of slowest Kelvin element"
+      truth_value: 7.39e5
+      tolerance_full: 0.30
+      tolerance_half: 0.60
+      source: official
+    - name: E2_SI
+      description: "Modulus of second Kelvin element"
+      truth_value: 4.5e5
+      tolerance_full: 0.30
+      tolerance_half: 0.60
+      source: official
+    - name: beta_gf_inv_SI
+      description: "Conversion factor σ/ε = β F (F in gf, σ in SI)"
+      truth_value: 3.24e5
+      tolerance_full: 0.10
+      tolerance_half: 0.20
+      source: derived
+
+parts:
+  - part_id: A.1
+    request: "Measure unstretched thread length ℓ0 and report ℓ0 ± σ."
+    answer: {l0_m: [value, sigma]}
+    points: 0.3
+  - part_id: A.2
+    request: "Measure mass-set weight P0 in gf and report P0 ± σ."
+    answer: {P0_gf: [value, sigma]}
+    points: 0.3
+  - part_id: A.3
+    request: "Record scale readings P(t) while the thread relaxes, for ≈45 minutes."
+    expected_data: {timeseries: {cols: [t_s, P_gf], min_samples: 30, duration_s: 2700}}
+    points: 1.0
+  - part_id: A.4
+    request: "Measure stretched thread length ℓ and report ℓ ± σ."
+    answer: {l_m: [value, sigma]}
+    points: 0.3
+  - part_id: D.3
+    request: "Compute strain ε and its uncertainty."
+    answer: {epsilon: [value, sigma]}
+    points: 0.3
+  - part_id: D.4
+    request: "Compute β."
+    answer: {beta_gf_inv_SI: [value]}
+    points: 0.3
+  - part_id: D.8
+    request: "Extract τ1 and E1 by linearising dF/dt at long times."
+    answer: {tau1_s: [value], E1_SI: [value]}
+    points: 1.0
+  - part_id: D.9
+    request: "Extract E0 from long-time baseline."
+    answer: {E0_SI: [value]}
+    points: 0.3
+  - part_id: D.11
+    request: "Extract τ2 and E2 from y(t)."
+    answer: {tau2_s: [value], E2_SI: [value]}
+    points: 1.0
+  - part_id: D.13
+    request: "Estimate τ3 from short-time tail."
+    answer: {tau3_s: [value]}
+    points: 0.3
+  # Descriptive/graphical parts (D.2, D.5, D.6, D.7, D.10, D.12) are defined in
+  # the marking scheme but scored 0 in v0 since they require judge evaluation.
+
+scoring:
+  total_points: 7.6
+  rubric:
+    - criterion: tau1_within_full_tolerance
+      parameter: tau1_s
+      points: 1.0
+    - criterion: E1_within_full_tolerance
+      parameter: E1_SI
+      points: 0.5
+    - criterion: E0_within_full_tolerance
+      parameter: E0_SI
+      points: 0.3
+    - criterion: tau2_within_full_tolerance
+      parameter: tau2_s
+      points: 0.5
+    - criterion: E2_within_full_tolerance
+      parameter: E2_SI
+      points: 0.5
+    - criterion: tau3_within_full_tolerance
+      parameter: tau3_s
+      points: 0.3
+    - criterion: epsilon_within_tolerance_and_sigma_consistent
+      parameter: epsilon
+      points: 0.3
+    - criterion: data_table_has_enough_samples
+      min_samples: 30
+      points: 1.0
+    - criterion: beta_within_tolerance
+      parameter: beta_gf_inv_SI
+      points: 0.3
+    # Parts scored as present/absent (not graded for correctness in v0):
+    - criterion: A1_length_reported_with_sigma
+      points: 0.3
+    - criterion: A2_weight_reported_with_sigma
+      points: 0.3
+    - criterion: A4_stretched_length_reported_with_sigma
+      points: 0.3
+    - criterion: A3_timeseries_captured
+      points: 1.0
+    # Partial credit via half-tolerance bands is handled in the scorer.
