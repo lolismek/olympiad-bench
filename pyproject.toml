@@ -1,0 +1,25 @@
+[project]
+name = "olympiad-bench"
+version = "0.0.1"
+description = "IPhO experimental-round simulated-environment benchmark (v0 prototype)"
+requires-python = ">=3.11"
+dependencies = [
+    "numpy>=1.26",
+    "scipy>=1.11",
+    "pydantic>=2.5",
+    "pyyaml>=6.0",
+    "matplotlib>=3.8",
+    "inspect-ai>=0.3",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["envs*", "eval*"]
