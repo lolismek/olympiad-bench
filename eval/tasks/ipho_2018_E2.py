@@ -36,7 +36,7 @@ _spec = Spec.load(TASK_DIR / "spec.yaml")
 _problem_md = (TASK_DIR / "problem.md").read_text()
 
 N_SEEDS_DEFAULT = 3
-MAX_TOOL_CALLS = 220  # 200-call env budget + a few scoring reads
+MAX_TOOL_CALLS = 500  # 200 env calls × ~2 messages/call + headroom
 
 
 # --- Env access helper ------------------------------------------------------
