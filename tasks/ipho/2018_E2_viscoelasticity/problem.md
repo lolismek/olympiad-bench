@@ -99,3 +99,47 @@ the scale. The scale then reads `P(t) = P₀ − F(t)/g` in gram-force units, wh
 
 Final deliverables the scorer evaluates: `E₀`, `E₁`, `τ₁`, `E₂`, `τ₂`, `τ₃` (SI
 units). Uncertainties are only required for `ℓ₀`, `P₀`, `ℓ`, `ε`.
+
+---
+
+## Submission format
+
+Call the `submit` tool **once** with a single dictionary argument. The scorer
+looks for the exact keys below (both a value and — where noted — a 1-σ
+uncertainty, as a two-element list `[value, sigma]`):
+
+| Key | Units | Form | Notes |
+|---|---|---|---|
+| `l0_m` | metres | `[value, sigma]` | A.1 unstretched length |
+| `P0_gf` | gram-force | `[value, sigma]` | A.2 total weight |
+| `l_m` | metres | `[value, sigma]` | A.4 stretched length |
+| `epsilon` | dimensionless | `[value, sigma]` | D.3 strain |
+| `beta_gf_inv_SI` | Pa / gf | `[value]` | D.4 stress-over-force coefficient |
+| `tau1_s` | seconds | `[value]` | D.8 slowest relaxation time |
+| `E1_SI` | N/m² (Pa) | `[value]` | D.8 modulus of slowest Kelvin mode |
+| `E0_SI` | N/m² (Pa) | `[value]` | D.9 elastic baseline modulus |
+| `tau2_s` | seconds | `[value]` | D.11 intermediate relaxation time |
+| `E2_SI` | N/m² (Pa) | `[value]` | D.11 modulus of intermediate mode |
+| `tau3_s` | seconds | `[value]` | D.13 fastest relaxation time |
+
+Index convention: `τ₁ > τ₂ > τ₃` (the subscript is ordered by *decreasing*
+relaxation time, matching the official IPhO solution). Please submit all SI
+moduli in N/m² (Pa), **not** kPa or MPa.
+
+Example (values illustrative, not correct):
+
+```python
+submit(answer={
+    "l0_m": [0.437, 2e-4],
+    "P0_gf": [81.11, 0.03],
+    "l_m": [0.510, 2e-4],
+    "epsilon": [0.167, 0.001],
+    "beta_gf_inv_SI": [3.24e5],
+    "tau1_s": [1550.0],
+    "E1_SI": [7.4e5],
+    "E0_SI": [1.31e7],
+    "tau2_s": [180.0],
+    "E2_SI": [4.5e5],
+    "tau3_s": [50.0],
+})
+```

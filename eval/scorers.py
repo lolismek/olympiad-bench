@@ -12,12 +12,70 @@ explanation so the rubric can be extended as we iterate.
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 
 from inspect_ai.scorer import Score, Scorer, Target, mean, scorer
 from inspect_ai.solver import TaskState
 
 from envs.common.spec_schema import Spec
+
+
+# Common stylistic aliases contestants use for our canonical parameter names.
+# Keys are canonical (matching spec.yaml); values are alternate spellings.
+# We canonicalize the submission before checking so minor deviations (e.g.
+# `tau_1`, `τ_1`, `ell_0`) don't silently tank the score.
+_ALIAS_MAP: dict[str, list[str]] = {
+    "l0_m": ["ell_0", "ell0", "l0", "L0", "ell_unstretched"],
+    "l_m": ["ell", "L", "l", "ell_stretched"],
+    "P0_gf": ["P_0", "P0", "p_0", "p0", "mass"],
+    "epsilon": ["eps", "strain", "ε"],
+    "beta_gf_inv_SI": ["beta", "β"],
+    "tau1_s": ["tau_1", "tau1", "τ_1", "τ1"],
+    "tau2_s": ["tau_2", "tau2", "τ_2", "τ2"],
+    "tau3_s": ["tau_3", "tau3", "τ_3", "τ3"],
+    "E0_SI": ["E_0", "E0"],
+    "E1_SI": ["E_1", "E1"],
+    "E2_SI": ["E_2", "E2"],
+}
+
+
+def _normalize_key(k: str) -> str:
+    """Lowercase, strip non-alphanumerics, drop common suffixes."""
+    k = k.strip().lower()
+    k = re.sub(r"[^a-z0-9]", "", k)
+    for suffix in ("si", "s", "m", "gf", "unit"):
+        if k.endswith(suffix) and len(k) > len(suffix):
+            k2 = k[: -len(suffix)]
+            if k2:
+                return k2
+    return k
+
+
+def _canonicalize_answer(answer: dict[str, Any], canonical_keys: list[str]) -> dict[str, Any]:
+    """Map submitted keys onto canonical spec keys via alias table + fuzzy match."""
+    out: dict[str, Any] = {}
+
+    # First copy any exact canonical matches straight through.
+    for canon in canonical_keys:
+        if canon in answer:
+            out[canon] = answer[canon]
+
+    # Build a lookup from normalized form → canonical.
+    norm_to_canon: dict[str, str] = {}
+    for canon in canonical_keys:
+        norm_to_canon[_normalize_key(canon)] = canon
+        for alias in _ALIAS_MAP.get(canon, []):
+            norm_to_canon[_normalize_key(alias)] = canon
+
+    # Any remaining submitted key: see if its normalized form hits an alias.
+    for k, v in answer.items():
+        if k in out:
+            continue
+        canon = norm_to_canon.get(_normalize_key(k))
+        if canon and canon not in out:
+            out[canon] = v
+    return out
 
 
 def _coerce_value(v: Any) -> float | None:
@@ -99,8 +157,11 @@ def _score_procedural_row(answer, spec, row, call_log):
 @scorer(metrics=[mean()])
 def rubric_scorer(spec: Spec) -> Scorer:
 
+    canonical_keys = [p.name for p in spec.physics_model.parameters]
+
     async def score(state: TaskState, target: Target) -> Score:
-        answer = state.store.get("submitted_answer") or {}
+        raw_answer = state.store.get("submitted_answer") or {}
+        answer = _canonicalize_answer(raw_answer, canonical_keys)
         call_log = state.store.get("call_log") or []
 
         earned = 0.0
