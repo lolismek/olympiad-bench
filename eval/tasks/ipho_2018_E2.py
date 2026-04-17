@@ -12,7 +12,10 @@ Layout (v0, one task, N parallel seeds as Samples):
 
 from __future__ import annotations
 
+import json
+import os
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
@@ -50,10 +53,27 @@ def _env():
     return env
 
 
+TRACE_PATH = Path(
+    os.environ.get("IPHO_TRACE_FILE")
+    or REPO_ROOT / "logs" / "trace.jsonl"
+)
+
+
 def _log(tool_name: str, **kw: Any) -> None:
+    entry = {"tool": tool_name, **kw}
     log = store().get("call_log") or []
-    log.append({"tool": tool_name, **kw})
+    log.append(entry)
     store().set("call_log", log)
+    # Also append to a plain JSONL trace file for live `tail -f`.
+    try:
+        TRACE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with TRACE_PATH.open("a") as f:
+            f.write(json.dumps(
+                {"ts": time.time(), "sample": store().get("sample_id"), **entry},
+                default=str,
+            ) + "\n")
+    except Exception:
+        pass  # tracing is best-effort; never break the run
 
 
 # --- Tools (thin wrappers around Env) ---------------------------------------
@@ -146,6 +166,7 @@ def init_env():
         env = _env_mod.Env(seed=int(seed))
         store().set("env", env)
         store().set("call_log", [])
+        store().set("sample_id", state.sample_id)
         return state
 
     return solve
