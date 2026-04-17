@@ -214,5 +214,8 @@ def ipho_2018_E2(seeds: int = N_SEEDS_DEFAULT) -> Task:
         ],
         scorer=rubric_scorer(_spec),
         message_limit=MAX_TOOL_CALLS,
-        config=GenerateConfig(system_message=SYSTEM_PROMPT),
+        config=GenerateConfig(
+            system_message=SYSTEM_PROMPT,
+            parallel_tool_calls=False,
+        ),
     )
