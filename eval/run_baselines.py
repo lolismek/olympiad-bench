@@ -38,6 +38,12 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv(REPO_ROOT / ".env")
+except ImportError:
+    pass
+
 from envs.common.load_task import load_task_env
 from envs.common.spec_schema import Spec
 from eval.scorers import rubric_scorer
