@@ -104,9 +104,14 @@ def _within_relative(val: float, truth: float, rel_tol: float) -> bool:
     return abs(val - truth) <= rel_tol * abs(truth)
 
 
-def _score_parameter_row(answer, spec, row):
+def _score_parameter_row(answer, spec, row, truth_overrides: dict[str, float] | None = None):
     name = row.parameter
-    truth = spec.param(name).truth_value
+    # Tolerances always come from spec; truth values may be overridden per-seed
+    # when the env runs in randomized mode.
+    if truth_overrides and name in truth_overrides:
+        truth = float(truth_overrides[name])
+    else:
+        truth = spec.param(name).truth_value
     rel_tol = spec.param(name).tolerance_full
     submitted = _coerce_value(answer.get(name))
     if submitted is None:
@@ -163,13 +168,14 @@ def rubric_scorer(spec: Spec) -> Scorer:
         raw_answer = state.store.get("submitted_answer") or {}
         answer = _canonicalize_answer(raw_answer, canonical_keys)
         call_log = state.store.get("call_log") or []
+        truth_overrides = state.store.get("truth") or None
 
         earned = 0.0
         max_total = 0.0
         rows_out = []
         for row in spec.scoring.rubric:
             if row.parameter is not None:
-                pts, expl = _score_parameter_row(answer, spec, row)
+                pts, expl = _score_parameter_row(answer, spec, row, truth_overrides)
             else:
                 pts, expl = _score_procedural_row(answer, spec, row, call_log)
             earned += pts

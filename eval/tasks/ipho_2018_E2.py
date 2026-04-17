@@ -162,11 +162,20 @@ def submit():
 @solver
 def init_env():
     async def solve(state: TaskState, generate_: Generate) -> TaskState:
-        seed = state.metadata.get("seed", 0)
-        env = _env_mod.Env(seed=int(seed))
+        seed = int(state.metadata.get("seed", 0))
+        randomize = bool(state.metadata.get("randomize", False))
+        strength = float(state.metadata.get("randomize_strength", 1.0))
+        env = _env_mod.Env(
+            seed=seed,
+            randomize=randomize,
+            randomize_strength=strength,
+        )
         store().set("env", env)
         store().set("call_log", [])
         store().set("sample_id", state.sample_id)
+        # Expose the per-seed truth so the scorer can check submissions
+        # against the *actual* values used by this run's env.
+        store().set("truth", dict(env.state.truth))
         return state
 
     return solve
@@ -186,12 +195,30 @@ SYSTEM_PROMPT = (
 
 
 @task
-def ipho_2018_E2(seeds: int = N_SEEDS_DEFAULT) -> Task:
+def ipho_2018_E2(
+    seeds: int = N_SEEDS_DEFAULT,
+    randomize: bool = False,
+    randomize_strength: float = 1.0,
+) -> Task:
+    """Run the task across N seeds.
+
+    Args:
+        seeds: number of parallel Samples (each seed is an independent run).
+        randomize: if True, each seed draws a deterministically-perturbed
+            truth within the physical envelope defined in env.py. Defaults
+            to False (canonical IPhO 2018 E2 truth values).
+        randomize_strength: ∈ [0, 1]. Linearly interpolates between the
+            original truth (0.0) and full `_BOUNDS` range (1.0).
+    """
     samples = [
         Sample(
             id=f"seed-{s}",
             input=_problem_md,
-            metadata={"seed": s},
+            metadata={
+                "seed": s,
+                "randomize": randomize,
+                "randomize_strength": randomize_strength,
+            },
         )
         for s in range(seeds)
     ]
