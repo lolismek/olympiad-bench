@@ -9,7 +9,12 @@ Agent-visible tool API:
     read_scale()                         -> {"t_s": float, "P_gf": float, "unit": "gf"}
     submit(answer: dict)                 -> {"accepted": True}
 
-Budget: 200 tool calls. Exceeding budget terminates the episode with score 0.
+Budgets (two independent pools):
+  • Experimental: 200 calls across measure_length / read_mass / stretch_thread
+    / wait / read_scale. Exhaustion returns a graceful error dict (tool is
+    a no-op), not a raised exception — the agent can still call `submit`.
+  • Scratchpad:   500 calls across calc / linreg.
+  • `submit` is free; ends the episode when called.
 
 Two truth modes, controlled by `Env(randomize=...)`:
 
@@ -42,7 +47,14 @@ from envs.physics.mechanics_ode import KelvinParams, simulate_generalized_kelvin
 
 TASK_DIR = Path(__file__).resolve().parent
 SPEC_PATH = TASK_DIR / "spec.yaml"
-DEFAULT_BUDGET = 200
+# Two independent budgets. Experimental tools consume physical lab resources
+# and stay capped tightly; the scratchpad (calc/linreg) is the equivalent of
+# a desk calculator — generous so tedious point-by-point arithmetic doesn't
+# starve the final submission. `submit` is never charged.
+DEFAULT_EXP_BUDGET = 200
+DEFAULT_SCRATCH_BUDGET = 500
+# Backwards-compat alias.
+DEFAULT_BUDGET = DEFAULT_EXP_BUDGET
 
 # Physical constants used when recomputing derived truths (β, E_k).
 _G_SI = 9.80
@@ -77,8 +89,12 @@ class EnvState:
     rng: np.random.Generator
     truth: dict[str, float]
     F3_gf: float
+    # Experimental tool budget (measure_length, read_mass, stretch, wait, read_scale).
     budget_used: int = 0
-    budget_total: int = DEFAULT_BUDGET
+    budget_total: int = DEFAULT_EXP_BUDGET
+    # Scratchpad budget (calc, linreg).
+    scratch_used: int = 0
+    scratch_total: int = DEFAULT_SCRATCH_BUDGET
     stretched: bool = False
     clock_s: float = 0.0
     t_stretch_s: float = 0.0
@@ -209,7 +225,8 @@ class Env:
         self,
         seed: int = 0,
         spec_path: Path | None = None,
-        budget: int = DEFAULT_BUDGET,
+        budget: int = DEFAULT_EXP_BUDGET,
+        scratch_budget: int = DEFAULT_SCRATCH_BUDGET,
         randomize: bool = False,
         randomize_strength: float = 1.0,
     ):
@@ -228,19 +245,43 @@ class Env:
                 truth["tau1_s"], truth["tau2_s"], truth["tau3_s"],
             )
         self.state = EnvState(
-            spec=spec, rng=rng, truth=truth, F3_gf=F3, budget_total=budget
+            spec=spec, rng=rng, truth=truth, F3_gf=F3,
+            budget_total=budget, scratch_total=scratch_budget,
         )
 
     # ---- budget / logging helpers -----------------------------------------
-    def _charge(self, tool: str, **kw: Any) -> None:
+    def _check_exp_budget(self, tool: str, **kw: Any) -> dict[str, Any] | None:
+        """Charge the experimental budget. Return an error dict to short-circuit
+        the tool call when exhausted; otherwise log and return None."""
+        if self.state.budget_used >= self.state.budget_total:
+            return {
+                "error": "experimental tool-call budget exhausted; you may "
+                "still call `submit` to lock in your current answer, or "
+                "`calc` / `linreg` to finish analysis",
+                "budget_used": self.state.budget_used,
+                "budget_total": self.state.budget_total,
+            }
         self.state.budget_used += 1
-        if self.state.budget_used > self.state.budget_total:
-            raise RuntimeError("Tool-call budget exhausted.")
         self.state.log.append({"tool": tool, "clock_s": self.state.clock_s, **kw})
+        return None
+
+    def _check_scratch_budget(self, tool: str, **kw: Any) -> dict[str, Any] | None:
+        if self.state.scratch_used >= self.state.scratch_total:
+            return {
+                "error": "scratchpad (calc/linreg) budget exhausted; submit "
+                "your current best answer with `submit`",
+                "scratch_used": self.state.scratch_used,
+                "scratch_total": self.state.scratch_total,
+            }
+        self.state.scratch_used += 1
+        self.state.log.append({"tool": tool, "clock_s": self.state.clock_s, **kw})
+        return None
 
     # ---- tools ------------------------------------------------------------
     def measure_length(self, target: str) -> dict[str, Any]:
-        self._charge("measure_length", target=target)
+        err = self._check_exp_budget("measure_length", target=target)
+        if err is not None:
+            return err
         if target == "thread_unstretched":
             truth = self.state.truth["l0_m"]
         elif target == "thread_stretched":
@@ -254,13 +295,17 @@ class Env:
         return {"length_m": round(value, 5), "sigma_m": 2.0e-4, "unit": "m"}
 
     def read_mass(self) -> dict[str, Any]:
-        self._charge("read_mass")
+        err = self._check_exp_budget("read_mass")
+        if err is not None:
+            return err
         truth = self.state.truth["P0_gf"]
         value = noisy_scale_reading(truth, self.state.rng, sigma_gf=0.03)
         return {"mass_gf": round(value, 2), "sigma_gf": 0.03, "unit": "gf"}
 
     def stretch_thread(self) -> dict[str, Any]:
-        self._charge("stretch_thread")
+        err = self._check_exp_budget("stretch_thread")
+        if err is not None:
+            return err
         if self.state.stretched:
             raise RuntimeError("Thread already stretched (one-shot).")
         self.state.stretched = True
@@ -268,14 +313,18 @@ class Env:
         return {"ok": True, "t_started_s": 0.0}
 
     def wait(self, duration_s: float) -> dict[str, Any]:
-        self._charge("wait", duration_s=duration_s)
+        err = self._check_exp_budget("wait", duration_s=duration_s)
+        if err is not None:
+            return err
         if duration_s <= 0:
             raise ValueError("duration_s must be positive.")
         self.state.clock_s += float(duration_s)
         return {"clock_s": self.state.clock_s - self.state.t_stretch_s if self.state.stretched else self.state.clock_s}
 
     def read_scale(self) -> dict[str, Any]:
-        self._charge("read_scale")
+        err = self._check_exp_budget("read_scale")
+        if err is not None:
+            return err
         if not self.state.stretched:
             truth_P = self.state.truth["P0_gf"]
             t_reported = 0.0
@@ -287,9 +336,10 @@ class Env:
         return {"t_s": round(t_reported, 2), "P_gf": round(P_noisy, 2), "unit": "gf"}
 
     def submit(self, answer: dict[str, Any]) -> dict[str, Any]:
-        self._charge("submit")
+        # submit is free — never charged against either budget.
         if self.state.submitted:
             raise RuntimeError("Already submitted.")
+        self.state.log.append({"tool": "submit", "clock_s": self.state.clock_s})
         self.state.submitted = True
         self.state.submitted_answer = dict(answer)
         return {"accepted": True}
@@ -297,11 +347,17 @@ class Env:
     # --- scratchpad tools (match what a contestant has on the desk) --------
 
     def calc(self, expr: str, store_as: str | None = None) -> dict[str, Any]:
-        self._charge("calc", expr=expr, store_as=store_as)
+        err = self._check_scratch_budget("calc", expr=expr, store_as=store_as)
+        if err is not None:
+            return err
         return self.state.calculator.evaluate(expr, store_as=store_as)
 
     def linreg(self, xs: list[float], ys: list[float]) -> dict[str, Any]:
-        self._charge("linreg", n=len(xs) if hasattr(xs, "__len__") else None)
+        err = self._check_scratch_budget(
+            "linreg", n=len(xs) if hasattr(xs, "__len__") else None
+        )
+        if err is not None:
+            return err
         try:
             return linear_regression(xs, ys)
         except ValueError as exc:

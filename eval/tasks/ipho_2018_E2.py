@@ -39,7 +39,9 @@ _spec = Spec.load(TASK_DIR / "spec.yaml")
 _problem_md = (TASK_DIR / "problem.md").read_text()
 
 N_SEEDS_DEFAULT = 3
-MAX_TOOL_CALLS = 500  # 200 env calls × ~2 messages/call + headroom
+# Budget envelope: 200 experimental + 500 scratchpad + ~10 submit/overhead,
+# doubled for the two messages per tool call (request + response).
+MAX_TOOL_CALLS = 1500
 
 
 # --- Env access helper ------------------------------------------------------
@@ -227,20 +229,25 @@ def init_env():
 SYSTEM_PROMPT = (
     "You are an International Physics Olympiad contestant solving an "
     "experimental problem. You have access to a simulated laboratory via "
-    "tools. You have a 200-tool-call budget and a single opportunity to "
-    "submit your final answer via the `submit` tool. Think carefully about "
-    "when to read the scale, how many measurements to take at long times "
-    "(slow relaxation), and what schedule of `wait_seconds` to use. Report "
-    "every quantity with its uncertainty.\n\n"
-    "Scratchpad tools (equivalent to the calculator on a real contestant's "
-    "desk): use `calc(expr, store_as=?)` for single-expression arithmetic — "
-    "it supports `exp`, `log`/`ln`, `sqrt`, trig, and the constants `pi` / "
-    "`e`, and can remember named values across calls. Use `linreg(xs, ys)` "
-    "for a least-squares fit of `y = slope·x + intercept` (returns slope, "
-    "intercept, r², and standard errors). No curve-fitting or nonlinear "
-    "optimization is provided — log-linearize first, then linreg, just like "
-    "at the real competition. Every calc/linreg call counts against the "
-    "tool-call budget."
+    "tools.\n\n"
+    "Budgets (two independent pools):\n"
+    "  • Experimental tools — 200 calls total for `measure_length`, "
+    "`read_mass`, `stretch_thread`, `wait_seconds`, `read_scale`. These "
+    "consume simulated lab resources; use them sparingly.\n"
+    "  • Scratchpad — 500 calls total for `calc` and `linreg`. These are "
+    "your desk calculator; use them freely for arithmetic.\n"
+    "  • `submit` is free and ends the episode. Call it exactly once when "
+    "you have a final answer.\n\n"
+    "Think carefully about when to read the scale, how many measurements to "
+    "take at long times (slow relaxation), and what schedule of "
+    "`wait_seconds` to use. Report every quantity with its uncertainty.\n\n"
+    "Scratchpad details: `calc(expr, store_as=?)` evaluates a single "
+    "expression — supports `exp`, `log`/`ln`, `sqrt`, trig, constants "
+    "`pi` / `e`, and remembers named values across calls (`^` is treated "
+    "as `**`). `linreg(xs, ys)` returns a least-squares fit of "
+    "`y = slope·x + intercept` with r² and standard errors. No curve-"
+    "fitting or nonlinear optimization is provided — log-linearize first, "
+    "then linreg, just like at the real competition."
 )
 
 
