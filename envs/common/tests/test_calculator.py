@@ -27,6 +27,15 @@ def test_arithmetic():
     assert c.evaluate("+5")["value"] == 5.0
 
 
+def test_caret_normalized_to_power():
+    """`^` is mathematician/calculator notation for exponentiation."""
+    c = Calculator()
+    assert c.evaluate("3^2")["value"] == 9.0
+    assert c.evaluate("2^10")["value"] == 1024.0
+    # Mixed with parens.
+    assert c.evaluate("(1+1)^3")["value"] == 8.0
+
+
 def test_math_functions():
     c = Calculator()
     assert c.evaluate("sqrt(16)")["value"] == 4.0

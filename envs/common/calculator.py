@@ -81,6 +81,11 @@ class Calculator:
         or `{"error": str}` on failure. The calculator is persistent; bindings
         made via `store_as` are available to subsequent `evaluate` calls.
         """
+        # `^` is mathematician/calculator notation for exponentiation; in Python
+        # it's XOR, which the calculator doesn't expose. Normalize up front so
+        # the agent doesn't burn calls on a notation mismatch.
+        if "^" in expr:
+            expr = expr.replace("^", "**")
         try:
             tree = ast.parse(expr, mode="eval")
         except SyntaxError as exc:
@@ -119,12 +124,21 @@ class Calculator:
                 raise ValueError(f"only numeric literals allowed (got {node.value!r})")
             return float(node.value)
 
-        if isinstance(node, ast.BinOp) and type(node.op) in _BIN_OPS:
+        if isinstance(node, ast.BinOp):
+            if type(node.op) not in _BIN_OPS:
+                raise ValueError(
+                    f"binary operator not allowed: {type(node.op).__name__} "
+                    "(supported: + - * / // % **)"
+                )
             return _BIN_OPS[type(node.op)](
                 self._eval_node(node.left), self._eval_node(node.right)
             )
 
-        if isinstance(node, ast.UnaryOp) and type(node.op) in _UNARY_OPS:
+        if isinstance(node, ast.UnaryOp):
+            if type(node.op) not in _UNARY_OPS:
+                raise ValueError(
+                    f"unary operator not allowed: {type(node.op).__name__}"
+                )
             return _UNARY_OPS[type(node.op)](self._eval_node(node.operand))
 
         if isinstance(node, ast.Name):
