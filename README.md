@@ -21,7 +21,8 @@ Current scope: one problem, **IPhO 2018 E2 — Viscoelasticity of a polymer thre
 - **Gate B** — engine, env, reference solution, 50-seed replay test all green (`pytest tasks/`).
 - **Gate C** — Inspect AI task + scorer wired; scorer sanity-tested; oracle ceiling = 1.0 / 1.0.
 - **Gate C.5** — truth-randomization mode added to defeat training-data memorization. Reference recovers ≥95% of randomized τ/E rows on 50-seed replay.
-- **Gate D** — pending first real-model baseline run at scale.
+- **Gate C.6** — `calc` + `linreg` tools added (TI-30-equivalent scratchpad). Matches what a real contestant has. 28 new unit tests.
+- **Gate D** — pending first real-model baseline run with calculator available.
 
 ---
 
@@ -33,7 +34,7 @@ Current scope: one problem, **IPhO 2018 E2 — Viscoelasticity of a polymer thre
 
 ### 2. Simulation (Gate B)
 
-The environment exposes the lab through 6 tools:
+The environment exposes the lab through 8 tools:
 
 | Tool | Purpose |
 |---|---|
@@ -42,7 +43,11 @@ The environment exposes the lab through 6 tools:
 | `stretch_thread()` | One-shot: hooks the fixture and starts the relaxation clock |
 | `wait_seconds(duration)` | Advances simulated wall clock |
 | `read_scale()` | Time-stamped (t, P(t)) reading once thread is stretched |
+| `calc(expr, store_as=?)` | Scientific calculator — arithmetic, `exp`/`log`/`sqrt`/trig, named memory slots |
+| `linreg(xs, ys)` | OLS fit `y = slope·x + intercept` (+ r², stderrs). TI-30 `LINREG`-equivalent |
 | `submit(answer)` | Ends the episode with the final parameter dict |
+
+The calculator (`calc`, `linreg`) matches what sits on a real contestant's desk. Expressions are AST-parsed with a closed whitelist of operators, math functions, and constants — no attribute access, subscripts, comprehensions, lambdas, or imports. Deliberately excluded: `curve_fit`, `scipy`, matrix ops, numpy arrays. The agent has to log-linearize to use `linreg`, exactly as in the official solution.
 
 `envs/physics/mechanics_ode.py` provides the generalized-Kelvin forward model: F(t) = F₀ + Σₖ Fₖ·exp(-t/τₖ). `envs/common/noise.py` wraps each tool return in realistic noise (ruler uniform ±0.5 mm, scale Gaussian σ = 0.01 gf, stopwatch jitter σ = 0.05 s). Budget: 200 tool calls per episode.
 

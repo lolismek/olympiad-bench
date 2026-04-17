@@ -157,6 +157,47 @@ def submit():
     return execute
 
 
+@tool
+def calc():
+    async def execute(expr: str, store_as: str | None = None) -> dict[str, Any]:
+        """Scientific calculator. Evaluate a single math expression.
+
+        Supports arithmetic, `sqrt`, `exp`, `log` / `ln`, `log10`, `log2`,
+        trig (`sin`/`cos`/…), `abs`, `min`, `max`, `round`, constants `pi`
+        and `e`. Optionally bind the result to a named memory slot that can
+        be referenced in later `calc` calls.
+
+        Args:
+            expr: a single expression, e.g. `"exp(-1200 / 1500)"` or
+                `"slope * -1"` after storing `slope` earlier.
+            store_as: optional variable name to save the result under.
+        """
+        r = _env().calc(expr, store_as=store_as)
+        _log("calc", expr=expr, store_as=store_as, result=r)
+        return r
+
+    return execute
+
+
+@tool
+def linreg():
+    async def execute(xs: list[float], ys: list[float]) -> dict[str, Any]:
+        """Ordinary least-squares linear regression of y = slope·x + intercept.
+
+        Returns slope, intercept, r², slope_stderr, intercept_stderr, n.
+        Equivalent to the `LINREG` button on a TI-30 / Casio fx-991.
+
+        Args:
+            xs: independent-variable values.
+            ys: dependent-variable values (same length as `xs`).
+        """
+        r = _env().linreg(xs, ys)
+        _log("linreg", n=len(xs), result=r)
+        return r
+
+    return execute
+
+
 # --- Solver: initialize the env for the sample -----------------------------
 
 @solver
@@ -190,7 +231,16 @@ SYSTEM_PROMPT = (
     "submit your final answer via the `submit` tool. Think carefully about "
     "when to read the scale, how many measurements to take at long times "
     "(slow relaxation), and what schedule of `wait_seconds` to use. Report "
-    "every quantity with its uncertainty."
+    "every quantity with its uncertainty.\n\n"
+    "Scratchpad tools (equivalent to the calculator on a real contestant's "
+    "desk): use `calc(expr, store_as=?)` for single-expression arithmetic — "
+    "it supports `exp`, `log`/`ln`, `sqrt`, trig, and the constants `pi` / "
+    "`e`, and can remember named values across calls. Use `linreg(xs, ys)` "
+    "for a least-squares fit of `y = slope·x + intercept` (returns slope, "
+    "intercept, r², and standard errors). No curve-fitting or nonlinear "
+    "optimization is provided — log-linearize first, then linreg, just like "
+    "at the real competition. Every calc/linreg call counts against the "
+    "tool-call budget."
 )
 
 
@@ -199,6 +249,7 @@ def ipho_2018_E2(
     seeds: int = N_SEEDS_DEFAULT,
     randomize: bool = False,
     randomize_strength: float = 1.0,
+    seed_offset: int = 0,
 ) -> Task:
     """Run the task across N seeds.
 
@@ -209,6 +260,9 @@ def ipho_2018_E2(
             to False (canonical IPhO 2018 E2 truth values).
         randomize_strength: ∈ [0, 1]. Linearly interpolates between the
             original truth (0.0) and full `_BOUNDS` range (1.0).
+        seed_offset: start index. Samples run over
+            `range(seed_offset, seed_offset + seeds)`. Use this to re-run a
+            specific seed (e.g. seeds=1 seed_offset=3 runs only seed-3).
     """
     samples = [
         Sample(
@@ -220,7 +274,7 @@ def ipho_2018_E2(
                 "randomize_strength": randomize_strength,
             },
         )
-        for s in range(seeds)
+        for s in range(seed_offset, seed_offset + seeds)
     ]
 
     return Task(
@@ -234,6 +288,8 @@ def ipho_2018_E2(
                     stretch_thread(),
                     wait_seconds(),
                     read_scale(),
+                    calc(),
+                    linreg(),
                     submit(),
                 ]
             ),

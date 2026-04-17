@@ -44,6 +44,7 @@ frozen), `F(t)` has the same exponential-sum form.
 | 6 | Digital scale (readability 0.01 gf, noise ≈0.01 gf) | `read_scale()` tool |
 | 8 | Stopwatch | implicit — scale reads are time-stamped |
 | 9 / 10 | Ruler / measuring tape (±0.5 mm resolution) | `measure_length(target)` tool |
+| — | Scientific calculator (TI-30 equivalent) | `calc(expr, store_as=?)` + `linreg(xs, ys)` tools |
 | — | Thread nominal diameter `d` | **given as constant** (Part B deferred) |
 
 The set-up: the mass-set rests on the digital scale. The thread is attached to the

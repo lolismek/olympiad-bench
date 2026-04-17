@@ -31,6 +31,7 @@ from typing import Any
 
 import numpy as np
 
+from envs.common.calculator import Calculator, linear_regression
 from envs.common.noise import (
     noisy_length_reading,
     noisy_scale_reading,
@@ -84,6 +85,7 @@ class EnvState:
     submitted: bool = False
     submitted_answer: dict[str, Any] | None = None
     log: list[dict[str, Any]] = field(default_factory=list)
+    calculator: Calculator = field(default_factory=Calculator)
 
 
 # --- Truth construction -----------------------------------------------------
@@ -291,3 +293,16 @@ class Env:
         self.state.submitted = True
         self.state.submitted_answer = dict(answer)
         return {"accepted": True}
+
+    # --- scratchpad tools (match what a contestant has on the desk) --------
+
+    def calc(self, expr: str, store_as: str | None = None) -> dict[str, Any]:
+        self._charge("calc", expr=expr, store_as=store_as)
+        return self.state.calculator.evaluate(expr, store_as=store_as)
+
+    def linreg(self, xs: list[float], ys: list[float]) -> dict[str, Any]:
+        self._charge("linreg", n=len(xs) if hasattr(xs, "__len__") else None)
+        try:
+            return linear_regression(xs, ys)
+        except ValueError as exc:
+            return {"error": str(exc)}
